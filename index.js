@@ -7,12 +7,14 @@ import jwt from "jsonwebtoken";
 import User from "./models/users.js";
 import cors from "cors";
 import { json } from "stream/consumers";
+import cookieParser from "cookie-parser";
 
 // Load environment variables
 const app = express();
 dotenv.config();
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser())   //=> Digunakan untuk membaca cookie
 
 app.use(express.urlencoded({ extended: true }));
 app.set("view engine", "ejs");
@@ -29,6 +31,10 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
 
 // Routes Page
+app.get("/", async (req, res) => {
+  res.render("page");
+});
+
 app.get("/signup", async (req, res) => {
   res.render("signup");
 });
@@ -37,21 +43,18 @@ app.get("/signin", async (req, res) => {
   res.render("signin");
 });
 
-app.get("/home/:token", async (req, res) => {
-  const {token} = req.params;
+app.get("/home", async (req, res) => {
+  const token  = req.cookies['authtoken'];
 
-  const {userId} = jwt.verify(token, JWT_SECRET);
-  
-  console.log(userId);
   console.log(token);
 
-  const user = await User.findById(userId);
+  const { userId } = jwt.verify(token, JWT_SECRET);
 
+  const user = await User.findById(userId);
   console.log(user);
 
-  res.render("home", {user});
-
-})
+  res.render("home", { user });
+});
 
 // Routes signup
 app.post("/signup", async (req, res) => {
@@ -64,7 +67,7 @@ app.post("/signup", async (req, res) => {
 
     const usernameValidate = await User.findOne({
       username,
-    });
+    });   
 
     // Validate Email & Username
     if (emailValidate || usernameValidate) {
@@ -96,12 +99,14 @@ app.post("/signup", async (req, res) => {
     );
 
     res
+      .cookie("authtoken", token, { httpOnly: true, maxAge: 900000 })
       .json({
         message: "User created successfully",
         token: token,
         data: newUser,
       })
-      .status(201);
+      .status(201)
+      .redirect('home')
     // .render('signup', {newUser});
 
     console.log(newUser);
@@ -125,17 +130,26 @@ app.post("/signin", async (req, res) => {
       JWT_SECRET
     );
 
-    res.json({
-      token: token,
-    });
-    return;
-    res.redirect(`/home/${token}`)
+    res
+      .cookie("authtoken", token, { httpOnly: true, maxAge: 900000 })
+      // .json({
+      //   token: token,
+      // })
+      .status(201)
+      .redirect("home")
+    
   } else {
     return res.status(400).json({
       message: "Incorrect Password !",
     });
   }
 });
+
+app.post("/logout", (req, res) => {
+  res
+  .cookie("authtoken", "", { maxAge: 1 }).redirect("signin")
+  .redirect("page")
+}); 
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
